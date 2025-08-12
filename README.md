@@ -1,10 +1,10 @@
-Great! I'll prepare a full **README.md** draft for your sms-platform project, including what we covered and instructions for setup and running both backend and frontend. This will help you have a professional, shareable project overview and usage guide.
+A full **README.md** draft for the sms-platform project, including what it covers and instructions for setup and running both backend and frontend. This helps the project to have a professional, shareable project overview and usage guide.
 
 ---
 
 # README.md for sms-platform
 
-```markdown
+---
 # sms-platform
 
 A web-based bulk SMS sender using SIM800C GSM module built with the MERN stack (MongoDB, Express, React, Node.js).
