@@ -99,7 +99,7 @@ sms-platform/
 
 5. Start backend server:
 
-   ```bash
+   ```
    npm run dev
    ```
 
@@ -109,13 +109,13 @@ sms-platform/
 
 1. Navigate to frontend folder:
 
-   ```bash
+   ```
    cd frontend
    ```
 
 2. Install dependencies (includes react-router-dom, react-toastify):
 
-   ```bash
+   ```
    npm install
    ```
 
@@ -127,7 +127,7 @@ sms-platform/
 
 4. Start React development server:
 
-   ```bash
+   ```
    npm start
    ```
 
