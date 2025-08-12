@@ -77,13 +77,13 @@ sms-platform/
 
 1. Navigate to backend folder:
 
-   ```bash
+   ```
    cd backend
-````
+   ````
 
 2. Install dependencies:
 
-   ```bash
+   ```
    npm install
    ```
 
