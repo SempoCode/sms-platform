@@ -3,7 +3,7 @@ import React from 'react';
 
 const Settings = () => {
   return (
-    <div>
+    <div style={{ flex: 1, padding: '20px' }}>
       <h2>Settings (coming soon)</h2>
     </div>
   );

@@ -1,154 +1,172 @@
 import React, { useState, useEffect } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import * as XLSX from "xlsx";
 import smsService from "../services/smsService"; // expects sendSMS(numbersArray, message)
 
 const SmsForm = () => {
-  const [numbersInput, setNumbersInput] = useState(""); // raw input (comma/newline separated)
+  //States
+  const [numbersInput, setNumbersInput] = useState("");
   const [message, setMessage] = useState("");
-  const [validNumbers, setValidNumbers] = useState([]); // array of strings formatted +256...
-  const [invalidNumbers, setInvalidNumbers] = useState([]); // [{ raw, formatted, reason }]
+  const [validNumbers, setValidNumbers] = useState([]);
+  const [invalidNumbers, setInvalidNumbers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [carrierFilter, setCarrierFilter] = useState("both"); // "mtn", "airtel", "both"
+  const [mtnNumbers, setMtnNumbers] = useState([]);
+  const [airtelNumbers, setAirtelNumbers] = useState([]);
 
-  // Helper: normalize and validate one number
+
+  // Normalize and validate one number
   const normalizeAndValidate = (raw) => {
     const trimmed = String(raw || "").trim();
     if (!trimmed) return { valid: false, formatted: "", reason: "empty" };
+    if (/[A-Za-z]/.test(trimmed)) return { valid: false, formatted: trimmed, reason: "contains letters" };
 
-    // quick letter check on raw (before removing allowed symbols)
-    if (/[A-Za-z]/.test(trimmed)) {
-      return { valid: false, formatted: trimmed, reason: "contains letters" };
-    }
-
-    // Remove spaces and common separators
     let s = trimmed.replace(/[\s-()]/g, "");
+    if (s.startsWith("+")) s = "+" + s.slice(1).replace(/\D/g, "");
+    else s = s.replace(/\D/g, "");
 
-    // Keep leading + if there is one, otherwise only digits
-    if (s.startsWith("+")) {
-      s = "+" + s.slice(1).replace(/\D/g, "");
-    } else {
-      s = s.replace(/\D/g, "");
-    }
-
-    // Transform to candidate with +256
     let candidate = s;
-
-    // If digits only and starts with 0 (e.g., 0712345678)
-    if (!candidate.startsWith("+") && candidate.startsWith("0") && candidate.length === 10) {
-      candidate = "+256" + candidate.slice(1);
-    }
-    // If digits only and 9 digits like 712345678
-    else if (!candidate.startsWith("+") && candidate.length === 9) {
-      candidate = "+256" + candidate;
-    }
-    // If digits only and starts with 256 (256712345678)
-    else if (!candidate.startsWith("+") && candidate.startsWith("256") && candidate.length === 12) {
-      candidate = "+" + candidate;
-    }
-    // If candidate starts with +256 but perhaps has wrong length we will check below
+    if (!candidate.startsWith("+") && candidate.startsWith("0") && candidate.length === 10) candidate = "+256" + candidate.slice(1);
+    else if (!candidate.startsWith("+") && candidate.length === 9) candidate = "+256" + candidate;
+    else if (!candidate.startsWith("+") && candidate.startsWith("256") && candidate.length === 12) candidate = "+" + candidate;
     else if (!candidate.startsWith("+")) {
-      // fallback attempt: prefix +256 if length plausible (e.g., user entered 7123456780)
-      // but avoid forcing on odd lengths; we will mark invalid later if length wrong
-      if (candidate.length >= 8 && candidate.length <= 12 && !candidate.startsWith("256")) {
-        // try to make it +256 + last up-to-9 digits
-        candidate = "+256" + candidate.slice(-9);
-      } else {
-        // leave candidate as digits (will be validated)
-      }
+      if (candidate.length >= 8 && candidate.length <= 12 && !candidate.startsWith("256")) candidate = "+256" + candidate.slice(-9);
     }
 
-    // Final sanitization: ensure candidate has only + and digits
     if (candidate.startsWith("+")) candidate = "+" + candidate.slice(1).replace(/\D/g, "");
     else candidate = candidate.replace(/\D/g, "");
 
-    // Validate final
     const digitsOnly = candidate.startsWith("+") ? candidate.slice(1) : candidate;
-
-    // must start with 256
-    if (!digitsOnly.startsWith("256")) {
-      return { valid: false, formatted: candidate, reason: "missing country code (256)" };
-    }
-
-    // Accept +256 + 9 digits (mobile) => digitsOnly length 12
-    // Accept +256 + 8 digits (landline) => digitsOnly length 11
-    if (digitsOnly.length === 12 || digitsOnly.length === 11) {
-      // good: return formatted with leading +
-      return { valid: true, formatted: "+" + digitsOnly, reason: null };
-    }
-
-    // otherwise invalid length
+    if (!digitsOnly.startsWith("256")) return { valid: false, formatted: candidate, reason: "missing country code (256)" };
+    if (digitsOnly.length === 12 || digitsOnly.length === 11) return { valid: true, formatted: "+" + digitsOnly, reason: null };
     return { valid: false, formatted: "+" + digitsOnly, reason: "invalid length" };
   };
 
-  // parse raw input into arrays (runs in real-time)
+  //Detect Network Carrier
+  const detectCarrier = (number) => {
+    if (!number.startsWith("+256")) return "Other";
+    const local = number.slice(4); // remove +256
+
+    const airtelPrefixes = ["70", "75", "74", "20"]; // includes Africell numbers
+    const mtnPrefixes = ["76", "77", "78", "79", "30"];
+
+    const firstTwo = local.slice(0, 2);
+    const firstThree = local.slice(0, 3);
+
+    if (mtnPrefixes.includes(firstTwo)) return "MTN";
+    if (airtelPrefixes.includes(firstTwo) || airtelPrefixes.includes(firstThree)) return "Airtel";
+
+    return "Other";
+  };
+
+
+  // Parse raw input into arrays (runs in real-time)
   useEffect(() => {
     const parts = numbersInput
-      .split(/[\n,;]+/) // split by newlines, commas, semicolons
+      .split(/[\n,;]+/)
       .map((x) => x.trim())
       .filter((x) => x.length > 0);
 
     const valids = [];
     const invalids = [];
-
     const seen = new Set();
+
+    const mtns = [];
+    const airtels = [];
 
     for (const raw of parts) {
       const res = normalizeAndValidate(raw);
-      // dedupe by formatted number for valids
       if (res.valid) {
         if (!seen.has(res.formatted)) {
           valids.push(res.formatted);
           seen.add(res.formatted);
+
+          const carrier = detectCarrier(res.formatted);
+          if (carrier === "MTN") mtns.push(res.formatted);
+          else if (carrier === "Airtel") airtels.push(res.formatted);
         }
       } else {
-        // include the reason and raw input for inspection
         invalids.push({ raw, formatted: res.formatted || raw, reason: res.reason });
       }
     }
 
     setValidNumbers(valids);
     setInvalidNumbers(invalids);
+    setMtnNumbers(mtns);
+    setAirtelNumbers(airtels);
   }, [numbersInput]);
 
   const handleSend = async (e) => {
     e.preventDefault();
+    if (!message.trim()) return toast.error("Message cannot be empty");
 
-    // Validation: message non-empty
-    if (!message.trim()) {
-      toast.error("Message cannot be empty");
-      return;
-    }
+    let numbersToSend = [];
+    if (carrierFilter === "mtn") numbersToSend = mtnNumbers;
+    else if (carrierFilter === "airtel") numbersToSend = airtelNumbers;
+    else numbersToSend = validNumbers;
 
-    if (validNumbers.length === 0) {
-      toast.error("No valid numbers to send to");
-      return;
-    }
+    if (numbersToSend.length === 0) return toast.error(`No valid numbers for ${carrierFilter}`);
 
     setLoading(true);
     try {
-      // expected smsService.sendSMS(numbersArray, message)
-      await smsService.sendSMS(validNumbers, message);
-
-      toast.success(`Sent to ${validNumbers.length} number(s)`);
-      // Clear only the numbers that were sent
-      // Keep invalid numbers visible for user to fix
+      const res = await smsService.sendSMS(numbersToSend, message);
+      if (!res.success) {
+        throw new Error(res.error || "SMS sending failed");
+      }
+      toast.success(`Sent to ${numbersToSend.length} number(s)`);
       setNumbersInput("");
       setMessage("");
       setValidNumbers([]);
-      // optionally you can keep invalidNumbers as is
     } catch (err) {
       console.error(err);
-      toast.error("Failed to send SMS. Check backend or serial connection.");
-    } finally {
-      setLoading(false);
+      toast.error(err.message || "Failed to send SMS. Check backend or serial connection.");
     }
+
+  };
+
+  // Handle CSV/Excel upload
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const extension = file.name.split(".").pop().toLowerCase();
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      let contacts = [];
+      const data = event.target.result;
+
+      try {
+        if (extension === "csv") {
+          contacts = data.split(/\r?\n/).map((x) => x.trim()).filter((x) => x.length > 0);
+        } else if (extension === "xlsx" || extension === "xls") {
+          const workbook = XLSX.read(data, { type: "binary" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const json = XLSX.utils.sheet_to_json(sheet); // array of objects
+          contacts = json.map(row => row.number ?? row.Number ?? row.phone ?? Object.values(row)[0])
+                         .filter(n => n && n.toString().trim().length > 0);
+        } else {
+          toast.error("Unsupported file type. Use CSV or Excel.");
+          return;
+        }
+
+        setNumbersInput(contacts.join("\n"));
+        toast.success(`Imported ${contacts.length} contact(s)`);
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to parse file");
+      }
+    };
+
+    if (extension === "csv") reader.readAsText(file);
+    else reader.readAsBinaryString(file);
   };
 
   return (
     <div style={{ maxWidth: 800, margin: "20px auto", padding: 16 }}>
       <ToastContainer position="top-right" autoClose={3000} />
-      <h2>Send SMS</h2>
-
+     
       <form onSubmit={handleSend}>
         <label>Phone numbers (comma / newline / semicolon separated)</label>
         <textarea
@@ -159,7 +177,11 @@ const SmsForm = () => {
           style={{ width: "100%", padding: 8, marginBottom: 12 }}
         />
 
-        <label>Message</label>
+        <label>Or upload CSV / Excel file</label><br></br>
+        <input type="file" accept=".csv,.xls,.xlsx" onChange={handleFile} style={{ marginBottom: 12 }} />
+
+        <br></br><label>Message</label>
+      
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -167,6 +189,17 @@ const SmsForm = () => {
           rows={4}
           style={{ width: "100%", padding: 8, marginBottom: 12 }}
         />
+        <label>Send to:</label>
+        <select 
+          value={carrierFilter}
+          onChange={(e) => setCarrierFilter(e.target.value)}
+          style={{ marginBottom: 12, marginLeft: 8 }}
+        >
+          <option value="both">All</option>
+          <option value="mtn">MTN Only</option>
+          <option value="airtel">Airtel Only</option>
+        </select>
+
 
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <button
@@ -183,11 +216,8 @@ const SmsForm = () => {
             {loading ? "Sending..." : "Send SMS"}
           </button>
 
-          {loading && (
-            <div aria-hidden style={{ display: "inline-block" }}>
-              <div className="spinner" />
-            </div>
-          )}
+          
+          {loading && <div className="spinner" />}
 
           <div style={{ marginLeft: "auto", fontSize: 14, color: "#555" }}>
             Valid: <strong>{validNumbers.length}</strong> • Invalid: <strong>{invalidNumbers.length}</strong>
@@ -196,35 +226,59 @@ const SmsForm = () => {
       </form>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginTop: 20 }}>
-        <div>
+        {/* <div>
           <h3>Valid Numbers ({validNumbers.length})</h3>
           <div style={{ background: "#fff", padding: 8, borderRadius: 6, minHeight: 60 }}>
-            {validNumbers.length === 0 ? (
-              <em style={{ color: "#666" }}>No valid numbers yet</em>
-            ) : (
+            {validNumbers.length === 0 ? <em style={{ color: "#666" }}>No valid numbers yet</em> : (
               <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {validNumbers.map((n) => (
-                  <li key={n}>{n}</li>
-                ))}
+                {validNumbers.map((n) => <li key={n}>{n}</li>)}
               </ul>
             )}
           </div>
+        </div> */}
+
+        <div>
+          <h3>Valid Numbers</h3>
+          {mtnNumbers.length === 0 && airtelNumbers.length === 0 ? (
+            <em style={{ color: "#666", background: "#fff", padding: 8, borderRadius: 6, minHeight: 60 }}>No valid numbers yet</em>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: `${mtnNumbers.length && airtelNumbers.length ? "1fr 1fr" : "1fr"}`, gap: 20, marginTop: 10 }}>
+              
+              {mtnNumbers.length > 0 && (
+                <div>
+                  <h4>MTN ({mtnNumbers.length})</h4>
+                  <div style={{ background: "#fff", padding: 8, borderRadius: 6, minHeight: 60 }}>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {mtnNumbers.map((n) => <li key={n}>{n}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {airtelNumbers.length > 0 && (
+                <div>
+                  <h4>Airtel ({airtelNumbers.length})</h4>
+                  <div style={{ background: "#fff", padding: 8, borderRadius: 6, minHeight: 60 }}>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {airtelNumbers.map((n) => <li key={n}>{n}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
         </div>
+
 
         <div>
           <h3>Invalid Numbers ({invalidNumbers.length})</h3>
           <div style={{ background: "#fff", padding: 8, borderRadius: 6, minHeight: 60 }}>
-            {invalidNumbers.length === 0 ? (
-              <em style={{ color: "#666" }}>No invalid numbers</em>
-            ) : (
+            {invalidNumbers.length === 0 ? <em style={{ color: "#666" }}>No invalid numbers</em> : (
               <ul style={{ margin: 0, paddingLeft: 18 }}>
                 {invalidNumbers.map((it, idx) => (
                   <li key={idx}>
-                    <strong>{it.raw}</strong>
-                    {" → "}
-                    <span style={{ color: "#c00" }}>{it.formatted}</span>
-                    {" — "}
-                    <em style={{ color: "#555" }}>{it.reason}</em>
+                    <strong>{it.raw}</strong> → <span style={{ color: "#c00" }}>{it.formatted}</span> — <em style={{ color: "#555" }}>{it.reason}</em>
                   </li>
                 ))}
               </ul>
@@ -233,7 +287,6 @@ const SmsForm = () => {
         </div>
       </div>
 
-      {/* small spinner CSS */}
       <style>{`
         .spinner {
           width: 18px;

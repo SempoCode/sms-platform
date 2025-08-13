@@ -1,15 +1,11 @@
-// src/pages/SendSMS.jsx
 import React from 'react';
 import SmsForm from '../components/SmsForm';
 
-const SendSMS = () => {
+export default function SendSMS({ onSend }) {
   return (
-    <div>
-      <h2>Send SMS</h2>
-      <SmsForm />
-      {/* Later: CSV/Excel import button here */}
-    </div>
+    <>
+      <h2>📨 Send SMS</h2>
+      <SmsForm onSend={onSend} />
+    </>
   );
-};
-
-export default SendSMS;
+}

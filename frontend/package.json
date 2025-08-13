@@ -6,9 +6,11 @@
     "axios": "^1.6.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "react-papaparse": "^4.4.0",
+    "react-router-dom": "^6.30.1",
     "react-scripts": "5.0.1",
-    "react-router-dom": "^6.27.0",
-    "react-toastify": "^10.0.0"
+    "react-toastify": "^10.0.6",
+    "xlsx": "^0.18.5"
   },
   "scripts": {
     "start": "react-scripts start",
