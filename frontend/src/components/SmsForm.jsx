@@ -111,19 +111,26 @@ const SmsForm = () => {
     setLoading(true);
     try {
       const res = await smsService.sendSMS(numbersToSend, message);
-      if (!res.success) {
-        throw new Error(res.error || "SMS sending failed");
+
+      // Expect backend to return something like: { success: true, results: [...] }
+      if (!res || res.success !== true) {
+        throw new Error(res?.error || "SMS sending failed");
       }
+
       toast.success(`Sent to ${numbersToSend.length} number(s)`);
       setNumbersInput("");
       setMessage("");
       setValidNumbers([]);
+      setInvalidNumbers([]);
     } catch (err) {
       console.error(err);
       toast.error(err.message || "Failed to send SMS. Check backend or serial connection.");
+    } finally {
+      // ✅ Always stop loading state
+      setLoading(false);
     }
-
   };
+
 
   // Handle CSV/Excel upload
   const handleFile = (e) => {
@@ -168,7 +175,7 @@ const SmsForm = () => {
       <ToastContainer position="top-right" autoClose={3000} />
      
       <form onSubmit={handleSend}>
-        <label>Phone numbers (comma / newline / semicolon separated)</label>
+        <label><h4>Enter Phone numbers</h4> (comma / newline / semicolon separated)</label>
         <textarea
           value={numbersInput}
           onChange={(e) => setNumbersInput(e.target.value)}
@@ -177,11 +184,25 @@ const SmsForm = () => {
           style={{ width: "100%", padding: 8, marginBottom: 12 }}
         />
 
-        <label>Or upload CSV / Excel file</label><br></br>
-        <input type="file" accept=".csv,.xls,.xlsx" onChange={handleFile} style={{ marginBottom: 12 }} />
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 6, fontWeight: 600, fontSize: 16 }}>
+            Or upload CSV / Excel file
+          </label>
+          <input
+            type="file"
+            accept=".csv,.xls,.xlsx"
+            onChange={handleFile}
+            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #ccc", fontSize: 14, cursor: "pointer", width: "100%",
+              boxSizing: "border-box"
+            }}
+          />
+        </div>
 
-        <br></br><label>Message</label>
-      
+        <label><h3>Message</h3></label>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <span>Type your message here...</span>
+          <span style={{ fontSize: 12, color: "#555" }}>{message.length} characters</span>
+        </div>
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -189,6 +210,7 @@ const SmsForm = () => {
           rows={4}
           style={{ width: "100%", padding: 8, marginBottom: 12 }}
         />
+
         <label>Send to:</label>
         <select 
           value={carrierFilter}
