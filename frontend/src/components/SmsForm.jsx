@@ -1,19 +1,44 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import * as XLSX from "xlsx";
 import smsService from "../services/smsService"; // expects sendSMS(numbersArray, message)
+import { SmsContext } from "../context/SmsContext";
+
 
 const SmsForm = () => {
+  
   //States
-  const [numbersInput, setNumbersInput] = useState("");
-  const [message, setMessage] = useState("");
+  const { numbersInput, setNumbersInput, message, setMessage } = useContext(SmsContext);
+
+  // Keep all your other states (validNumbers, loading, etc.)
   const [validNumbers, setValidNumbers] = useState([]);
   const [invalidNumbers, setInvalidNumbers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [carrierFilter, setCarrierFilter] = useState("both"); // "mtn", "airtel", "both"
   const [mtnNumbers, setMtnNumbers] = useState([]);
   const [airtelNumbers, setAirtelNumbers] = useState([]);
+  const [charCount, setCharCount] = useState(0);
+  const [smsCount, setSmsCount] = useState(1);
+  const [isUCS2, setIsUCS2] = useState(false);
+
+  useEffect(() => {
+  const gsm7bitRegex = /^[\u0000-\u007F]*$/;
+  const ucs2 = !gsm7bitRegex.test(message);
+  setIsUCS2(ucs2);
+
+  const length = message.length;
+  setCharCount(length);
+
+  if (ucs2) {
+    // UCS2: 70 chars per SMS
+    setSmsCount(length === 0 ? 1 : Math.ceil(length / 70));
+  } else {
+    // GSM 7-bit: 160 chars per SMS
+    setSmsCount(length === 0 ? 1 : Math.ceil(length / 160));
+  }
+}, [message]);
+
 
 
   // Normalize and validate one number
@@ -199,10 +224,17 @@ const SmsForm = () => {
         </div>
 
         <label><h3>Message</h3></label>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        {/* <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <span>Type your message here...</span>
           <span style={{ fontSize: 12, color: "#555" }}>{message.length} characters</span>
-        </div>
+        </div> */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+  <span>Type your message here...</span>
+  <span style={{ fontSize: 12, color: "#555" }}>
+    {charCount} characters • {smsCount} SMS {smsCount > 1 ? "(multiple messages, cost increases)" : ""}
+  </span>
+</div>
+
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}

@@ -15,6 +15,7 @@ import Settings from './pages/Settings';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import Contact from './pages/Contact';
+import { SmsProvider } from "./context/SmsContext";
 
 export default function App() {
   return (
@@ -22,23 +23,25 @@ export default function App() {
       <div style={{ padding: '20px' }}>
           <h1>📨 Bulk SMS Sender</h1>
         </div>
-      <Router>
-        <Navbar />
-        <div style={{ padding: '20px' }}>        
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/send-sms" element={<SendSMS />} />
-            <Route path="/template" element={<Template />} />
-            <Route path="/logs" element={<Logs />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/privacy" element={<PrivacyPolicy />} />
-            <Route path="/terms" element={<TermsOfService />} />
-            <Route path="/contact" element={<Contact />} />
-          </Routes>
-          <ToastContainer />
-        </div>
-      </Router>
-       <Footer />
+        <SmsProvider>
+          <Router>
+            <Navbar />
+            <div style={{ padding: '20px' }}>        
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/send-sms" element={<SendSMS />} />
+                <Route path="/template" element={<Template />} />
+                <Route path="/logs" element={<Logs />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/terms" element={<TermsOfService />} />
+                <Route path="/contact" element={<Contact />} />
+              </Routes>
+              <ToastContainer />
+            </div>
+          </Router>
+          <Footer />
+       </SmsProvider>
     </div>
     
   );

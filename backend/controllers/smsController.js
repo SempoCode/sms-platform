@@ -45,9 +45,153 @@ const clearSerialBuffer = () => {
   });
 };
 
+// const sendSingleSMS = async (number, message) => {
+//   try {
+//     await clearSerialBuffer();
+
+//     // Init sequence
+//     for (let cmd of at.init()) {
+//       port.write(cmd + '\r');
+//       await waitFor(['OK'], 2000);
+//     }
+
+//     // SMS mode
+//     port.write('AT+CMGF=1\r');
+//     await waitFor(['OK'], 2000);
+
+//     // Set recipient
+//     port.write(`AT+CMGS="${number}"\r`);
+//     await waitFor(['>'], 4000); // Wait for prompt
+
+//     // Send message
+//     // port.write(message + String.fromCharCode(26)); 
+//     port.write(message);
+//     await new Promise(r => setTimeout(r, 3000)); // 3000ms delay
+//     port.write(String.fromCharCode(26)); // CTRL+Z
+
+//     await waitFor(['OK'], 10000); // Wait for send confirmation
+
+//     return { success: true, log: `✅ Sent successfully to ${number}` };
+//   } catch (err) {
+//     return { success: false, error: err.message, log: `❌ Failed to send to ${number}: ${err.message}` };
+//   }
+// };
+
+// const sendSingleSMS = async (number, message) => {
+//   try {
+//     await clearSerialBuffer();
+    
+//     // Init sequence
+//     for (let cmd of at.init()) {
+//       port.write(cmd + '\r');
+//       await waitFor(['OK'], 2000);
+//     }
+
+//     // Set SMS text mode
+//     port.write('AT+CMGF=1\r');
+//     await waitFor(['OK'], 2000);
+
+//     // Optional: set UCS2 character set if needed for special characters
+//     port.write('AT+CSCS="UCS2"\r');
+//     await waitFor(['OK'], 2000);
+
+//     port.write('AT+CMGF=1\r'); // reset text mode for UCS2
+//     await waitFor(['OK'], 2000);
+    
+//     message = toUCS2(message); // convert to UCS2 hex if enabled
+
+//     // Set recipient
+//     port.write(`AT+CMGS="${number}"\r`);
+//     await waitFor(['>'], 4000); // Wait for the > prompt
+
+//     // Send message in small chunks to prevent dropped characters
+//     const chunkSize = 50; // number of characters per write
+//     for (let i = 0; i < message.length; i += chunkSize) {
+//       const chunk = message.slice(i, i + chunkSize);
+//       port.write(chunk);
+//       await new Promise((r) => setTimeout(r, 10)); // tiny pause
+//     }
+
+//     // End message with CTRL+Z
+//     port.write(String.fromCharCode(26));
+//     const response = await waitFor(['OK', 'ERROR'], 10000);
+
+//     return { success: true, log: `✅ Sent successfully to ${number}` };
+//   } catch (err) {
+//     return { success: false, error: err.message, log: `❌ Failed to send to ${number}: ${err.message}` };
+//   }
+// };
+
+
+// const sendSingleSMS = async (number, message) => {
+//   try {
+//     await clearSerialBuffer();
+
+//     const gsm7bitRegex = /^[\u0000-\u007F]*$/;
+
+//     const toUCS2 = (str) => {
+//       return Buffer.from(str, 'utf16le')
+//         .swap16()
+//         .toString('hex')
+//         .toUpperCase();
+//     };
+
+//     // Init sequence
+//     for (let cmd of at.init()) {
+//       port.write(cmd + '\r');
+//       await waitFor(['OK'], 2000);
+//     }
+
+//     const isUCS2 = !gsm7bitRegex.test(message);
+
+//     if (isUCS2) {
+//       port.write('AT+CSCS="UCS2"\r');
+//       await waitFor(['OK'], 2000);
+//       port.write('AT+CMGF=1\r');
+//       await waitFor(['OK'], 2000);
+//       message = toUCS2(message);
+//     } else {
+//       port.write('AT+CSCS="GSM"\r');
+//       await waitFor(['OK'], 2000);
+//       port.write('AT+CMGF=1\r');
+//       await waitFor(['OK'], 2000);
+//     }
+
+//     // Send recipient
+//     port.write(`AT+CMGS="${isUCS2 ? toUCS2(number) : number}"\r`);
+//     await waitFor(['>'], 4000);
+
+//     // Send message in small UCS2-safe chunks
+//     const chunkSize = 20; // Adjust for serial stability
+//     for (let i = 0; i < message.length; i += chunkSize) {
+//       const chunk = message.slice(i, i + chunkSize);
+//       port.write(chunk);
+//       await new Promise((r) => setTimeout(r, 50)); // 50ms pause between chunks
+//     }
+
+//     // End message
+//     await new Promise(r => setTimeout(r, 3000));
+//     port.write(String.fromCharCode(26));
+//     await waitFor(['OK', 'ERROR'], 15000); // allow more time for long messages
+
+//     return { success: true, log: `✅ Sent successfully to ${number}` };
+//   } catch (err) {
+//     return { success: false, error: err.message, log: `❌ Failed to send to ${number}: ${err.message}` };
+//   }
+// };
+
 const sendSingleSMS = async (number, message) => {
   try {
     await clearSerialBuffer();
+
+    const gsm7bitRegex = /^[\u0000-\u007F]*$/;
+
+    const toUCS2 = (str) => {
+      return Buffer.from(str, 'utf16le')
+        .swap16()
+        .toString('hex')
+        .toUpperCase();
+    };
 
     // Init sequence
     for (let cmd of at.init()) {
@@ -55,27 +199,71 @@ const sendSingleSMS = async (number, message) => {
       await waitFor(['OK'], 2000);
     }
 
-    // SMS mode
-    port.write('AT+CMGF=1\r');
-    await waitFor(['OK'], 2000);
+    const isUCS2 = !gsm7bitRegex.test(message);
 
-    // Set recipient
-    port.write(`AT+CMGS="${number}"\r`);
-    await waitFor(['>'], 4000); // Wait for prompt
+    if (isUCS2) {
+      port.write('AT+CSCS="UCS2"\r');
+      await waitFor(['OK'], 2000);
+      port.write('AT+CMGF=1\r');
+      await waitFor(['OK'], 2000);
+    } else {
+      port.write('AT+CSCS="GSM"\r');
+      await waitFor(['OK'], 2000);
+      port.write('AT+CMGF=1\r');
+      await waitFor(['OK'], 2000);
+    }
 
-    // Send message
-    // port.write(message + String.fromCharCode(26)); 
-    port.write(message);
-    await new Promise(r => setTimeout(r, 3000)); // 3000ms delay
-    port.write(String.fromCharCode(26)); // CTRL+Z
+    // Determine maximum chars per part
+    const MAX_UCS2_CHARS = 67; // leaving 3 for UDH
+    const MAX_GSM_CHARS = 153; // 7-bit multi-part SMS
 
-    await waitFor(['OK'], 10000); // Wait for send confirmation
+    if (isUCS2 && message.length > 70) {
+      // Concatenated UCS2 SMS
+      const totalParts = Math.ceil(message.length / MAX_UCS2_CHARS);
+      const ref = Math.floor(Math.random() * 255); // Random reference number
+
+      for (let i = 0; i < totalParts; i++) {
+        const part = message.slice(i * MAX_UCS2_CHARS, (i + 1) * MAX_UCS2_CHARS);
+        const udh = `050003${ref.toString(16).padStart(2, '0')}${totalParts.toString(16).padStart(2,'0')}${(i+1).toString(16).padStart(2,'0')}`;
+        const hexMessage = udh + toUCS2(part);
+
+        port.write(`AT+CMGS="${toUCS2(number)}"\r`);
+        await waitFor(['>'], 4000);
+
+        // Chunked write for serial stability
+        const chunkSize = 20;
+        for (let j = 0; j < hexMessage.length; j += chunkSize) {
+          port.write(hexMessage.slice(j, j + chunkSize));
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+        port.write(String.fromCharCode(26));
+        await waitFor(['OK', 'ERROR'], 15000);
+      }
+    } else {
+      // Single-part message (GSM or short UCS2)
+      const sendMsg = isUCS2 ? toUCS2(message) : message;
+      port.write(`AT+CMGS="${isUCS2 ? toUCS2(number) : number}"\r`);
+      await waitFor(['>'], 4000);
+
+      // Chunked write
+      const chunkSize = 20;
+      for (let i = 0; i < sendMsg.length; i += chunkSize) {
+        port.write(sendMsg.slice(i, i + chunkSize));
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      await new Promise(r => setTimeout(r, 2000));
+      port.write(String.fromCharCode(26));
+      await waitFor(['OK', 'ERROR'], 15000);
+    }
 
     return { success: true, log: `✅ Sent successfully to ${number}` };
   } catch (err) {
     return { success: false, error: err.message, log: `❌ Failed to send to ${number}: ${err.message}` };
   }
 };
+
 
 exports.sendBulkSMS = async (req, res) => {
   const { numbers, message } = req.body;
