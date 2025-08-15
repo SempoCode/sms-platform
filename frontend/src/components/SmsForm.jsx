@@ -135,14 +135,18 @@ const SmsForm = () => {
 
     setLoading(true);
     try {
-      const res = await smsService.sendSMS(numbersToSend, message);
-
-      // Expect backend to return something like: { success: true, results: [...] }
-      if (!res || res.success !== true) {
-        throw new Error(res?.error || "SMS sending failed");
+      for (const number of numbersToSend) {
+        try {
+          const res = await smsService.sendSMS([number], message); // send to one number at a time
+          if (res && res.success === true) {
+            toast.success(`✅ Sent to ${number}`);
+          } else {
+            toast.error(`❌ Failed for ${number}: ${res?.error || "Unknown error"}`);
+          }
+        } catch (err) {
+          toast.error(`❌ Failed for ${number}: ${err.message}`);
+        }
       }
-
-      toast.success(`Sent to ${numbersToSend.length} number(s)`);
       setNumbersInput("");
       setMessage("");
       setValidNumbers([]);
