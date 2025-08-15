@@ -24,7 +24,7 @@ export default function App() {
           <h1>📨 Bulk SMS Sender</h1>
         </div>
         <SmsProvider>
-          <Router>
+          <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Navbar />
             <div style={{ padding: '20px' }}>        
               <Routes>
