@@ -127,7 +127,7 @@ const SmsForm = () => {
     if (!number.startsWith("+256")) return "Other";
     const local = number.slice(4); // remove +256
 
-    const airtelPrefixes = ["70", "75", "74", "20"]; // includes Africell numbers
+    const airtelPrefixes = ["70", "75", "74", "20"]; 
     const mtnPrefixes = ["76", "77", "78", "79", "30"];
 
     const firstTwo = local.slice(0, 2);
@@ -177,42 +177,53 @@ const SmsForm = () => {
   }, [numbersInput]);
 
   const handleSend = async (e) => {
-    e.preventDefault();
-    if (!message.trim()) return toast.error("Message cannot be empty");
+  e.preventDefault();
+  if (!message.trim()) return toast.error("Message cannot be empty");
 
-    let numbersToSend = [];
-    if (carrierFilter === "mtn") numbersToSend = mtnNumbers;
-    else if (carrierFilter === "airtel") numbersToSend = airtelNumbers;
-    else numbersToSend = validNumbers;
+  let numbersToSend = [];
+  if (carrierFilter === "mtn") numbersToSend = mtnNumbers;
+  else if (carrierFilter === "airtel") numbersToSend = airtelNumbers;
+  else numbersToSend = validNumbers;
 
-    if (numbersToSend.length === 0) return toast.error(`No valid numbers for ${carrierFilter}`);
+  if (numbersToSend.length === 0) {
+    return toast.error(`No valid numbers for ${carrierFilter}`);
+  }
 
-    setLoading(true);
-    try {
-      for (const number of numbersToSend) {
-        try {
-          const res = await smsService.sendSMS([number], message); // send to one number at a time
-          if (res && res.success === true) {
-            toast.success(`✅ Sent to ${number}`);
-          } else {
-            toast.error(`❌ Failed for ${number}: ${res?.error || "Unknown error"}`);
-          }
-        } catch (err) {
-          toast.error(`❌ Failed for ${number}: ${err.message}`);
-        }
+  setLoading(true);
+  try {
+    // ✅ Call backend ONCE with all numbers
+    const res = await smsService.sendSMS(numbersToSend, message);
+
+    if (!res || !res.results) {
+      throw new Error("Invalid response from backend");
+    }
+
+    // ✅ Show feedback per number
+    res.results.forEach((r) => {
+      if (r.success) {
+        toast.success(`✅ Sent to ${r.number}`);
+      } else {
+        toast.error(`❌ Failed for ${r.number}: ${r.error || "Unknown error"}`);
       }
+    });
+
+    // ✅ Only clear input if at least one was successful
+    const successCount = res.results.filter((r) => r.success).length;
+    if (successCount > 0) {
       setNumbersInput("");
       setMessage("");
       setValidNumbers([]);
       setInvalidNumbers([]);
-    } catch (err) {
-      console.error(err);
-      toast.error(err.message || "Failed to send SMS. Check backend or serial connection.");
-    } finally {
-      // ✅ Always stop loading state
-      setLoading(false);
     }
-  };
+
+  } catch (err) {
+    console.error(err);
+    toast.error(err.message || "Failed to send SMS. Check backend or serial connection.");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
 
   // Handle CSV/Excel upload

@@ -288,7 +288,7 @@ const sendSingleSMS = async (number, message) => {
           port.write(`AT+CMGS=${tpduLenOctets}\r`);
           await waitFor(['>'], 5000);
 
-          const chunkSize = 64;
+          const chunkSize = 20;
           for (let i = 0; i < pdu.length; i += chunkSize) {
             port.write(pdu.slice(i, i + chunkSize));
             await new Promise((r) => setTimeout(r, 20));
@@ -352,17 +352,38 @@ exports.sendBulkSMS = async (req, res) => {
     console.log(result.log);
 
     // Push structured result for frontend
-    results.push({
+    for (let num of numbers) {
+      const result = await sendWithRetry(num, message);
+
+      results.push({
+        number: num,
+        success: result.success,
+        error: result.error || null,
+        log: result.log
+      });
+
+      // Save **all messages** in the database
+      await SMS.create({
+        number: num,
+        message,
+        success: result.success,
+        error: result.error || null
+      });
+    }
+
+    
+    // Save only if sent successfully
+    // if (result.success) {
+    //   await SMS.create({ number: num, message });
+    // }
+    // Save all attempts
+    await SMS.create({
       number: num,
+      message,
       success: result.success,
-      error: result.error || null,
-      log: result.log
+      error: result.error || null
     });
 
-    // Save only if sent successfully
-    if (result.success) {
-      await SMS.create({ number: num, message });
-    }
   }
 
   // Final backend response
@@ -404,6 +425,3 @@ exports.runATCommand = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
-
-
