@@ -41,34 +41,88 @@ const SmsForm = () => {
 
 
 
-  // Normalize and validate one number
+  // // Normalize and validate one number
+  // const normalizeAndValidate = (raw) => {
+  //   const trimmed = String(raw || "").trim();
+  //   if (!trimmed) return { valid: false, formatted: "", reason: "empty" };
+  //   if (/[A-Za-z]/.test(trimmed)) return { valid: false, formatted: trimmed, reason: "contains letters" };
+
+  //   let s = trimmed.replace(/[\s-()]/g, "");
+  //   if (s.startsWith("+")) s = "+" + s.slice(1).replace(/\D/g, "");
+  //   else s = s.replace(/\D/g, "");
+
+  //   let candidate = s;
+  //   if (!candidate.startsWith("+") && candidate.startsWith("0") && candidate.length === 10) candidate = "+256" + candidate.slice(1);
+  //   else if (!candidate.startsWith("+") && candidate.length === 9) candidate = "+256" + candidate;
+  //   else if (!candidate.startsWith("+") && candidate.startsWith("256") && candidate.length === 12) candidate = "+" + candidate;
+  //   else if (!candidate.startsWith("+")) {
+  //     if (candidate.length >= 8 && candidate.length <= 12 && !candidate.startsWith("256")) candidate = "+256" + candidate.slice(-9);
+  //   }
+
+  //   if (candidate.startsWith("+")) candidate = "+" + candidate.slice(1).replace(/\D/g, "");
+  //   else candidate = candidate.replace(/\D/g, "");
+
+  //   const digitsOnly = candidate.startsWith("+") ? candidate.slice(1) : candidate;
+  //   if (!digitsOnly.startsWith("256")) return { valid: false, formatted: candidate, reason: "missing country code (256)" };
+  //   if (digitsOnly.length === 12 || digitsOnly.length === 11) return { valid: true, formatted: "+" + digitsOnly, reason: null };
+  //   return { valid: false, formatted: "+" + digitsOnly, reason: "invalid length" };
+  // };
+
+  //Detect Network Carrier
+  
+  // Normalize and validate one number (Uganda rules)
+
+
+  
   const normalizeAndValidate = (raw) => {
     const trimmed = String(raw || "").trim();
     if (!trimmed) return { valid: false, formatted: "", reason: "empty" };
     if (/[A-Za-z]/.test(trimmed)) return { valid: false, formatted: trimmed, reason: "contains letters" };
 
+    // Remove spaces, dashes, parentheses
     let s = trimmed.replace(/[\s-()]/g, "");
-    if (s.startsWith("+")) s = "+" + s.slice(1).replace(/\D/g, "");
-    else s = s.replace(/\D/g, "");
 
-    let candidate = s;
-    if (!candidate.startsWith("+") && candidate.startsWith("0") && candidate.length === 10) candidate = "+256" + candidate.slice(1);
-    else if (!candidate.startsWith("+") && candidate.length === 9) candidate = "+256" + candidate;
-    else if (!candidate.startsWith("+") && candidate.startsWith("256") && candidate.length === 12) candidate = "+" + candidate;
-    else if (!candidate.startsWith("+")) {
-      if (candidate.length >= 8 && candidate.length <= 12 && !candidate.startsWith("256")) candidate = "+256" + candidate.slice(-9);
+    // '+' must only appear at the very start if present
+    if (s.includes("+") && !s.startsWith("+")) {
+      return { valid: false, formatted: s, reason: "misplaced '+' sign" };
     }
 
-    if (candidate.startsWith("+")) candidate = "+" + candidate.slice(1).replace(/\D/g, "");
-    else candidate = candidate.replace(/\D/g, "");
+    // Helper to ensure all remaining are digits
+    const onlyDigits = (t) => /^\d+$/.test(t);
 
-    const digitsOnly = candidate.startsWith("+") ? candidate.slice(1) : candidate;
-    if (!digitsOnly.startsWith("256")) return { valid: false, formatted: candidate, reason: "missing country code (256)" };
-    if (digitsOnly.length === 12 || digitsOnly.length === 11) return { valid: true, formatted: "+" + digitsOnly, reason: null };
-    return { valid: false, formatted: "+" + digitsOnly, reason: "invalid length" };
+    if (s.startsWith("+")) {
+      const rest = s.slice(1);
+      if (!onlyDigits(rest)) return { valid: false, formatted: s, reason: "contains non-digits" };
+      if (!rest.startsWith("256")) return { valid: false, formatted: s, reason: "missing country code (256)" };
+      // +256 + 9 digits => rest must be 12 digits total
+      if (rest.length === 12) return { valid: true, formatted: "+" + rest, reason: null };
+      return { valid: false, formatted: "+" + rest, reason: "invalid length (expect +256 + 9 digits)" };
+    }
+
+    // No leading '+'
+    if (!onlyDigits(s)) return { valid: false, formatted: s, reason: "contains non-digits" };
+
+    if (s.startsWith("256")) {
+      // 256 + 9 digits => length 12
+      if (s.length === 12) return { valid: true, formatted: "+" + s, reason: null };
+      return { valid: false, formatted: s, reason: "invalid length after 256 (need 9 digits)" };
+    }
+
+    if (s.startsWith("0")) {
+      // 0 + 9 digits => length 10
+      if (s.length === 10) return { valid: true, formatted: "+256" + s.slice(1), reason: null };
+      return { valid: false, formatted: s, reason: "invalid length after 0 (need 9 digits)" };
+    }
+
+    // Otherwise: must be exactly 9 digits (local form)
+    if (s.length === 9) {
+      return { valid: true, formatted: "+256" + s, reason: null };
+    }
+
+    return { valid: false, formatted: s, reason: "invalid length (need exactly 9 digits if no prefix)" };
   };
 
-  //Detect Network Carrier
+  
   const detectCarrier = (number) => {
     if (!number.startsWith("+256")) return "Other";
     const local = number.slice(4); // remove +256
