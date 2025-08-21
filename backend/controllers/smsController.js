@@ -207,27 +207,7 @@ const sendSingleSMS = async (number, message) => {
       }
 
       port.write(String.fromCharCode(26)); // Ctrl+Z
-      // const resp = await waitFor(['+CMGS', 'ERROR'], 20000);
-      // if (resp.includes('+CMGS')) {
-      //   await waitFor(['OK'], 10000).catch(() => {});
-      //   return { success: true, log: `✅ Sent successfully to ${number}` };
-      // }
-      // return { success: false, error: resp.trim(), log: `❌ Failed to send to ${number}` };
-      
-      // const resp = await waitFor(['+CMGS', 'ERROR'], 20000);
-
-      // if (resp.includes('+CMGS')) {
-      //   // Try to wait for OK, but don’t fail if it never comes
-      //   waitFor(['OK'], 10000).catch(() => {
-      //     console.log(`⚠️ No final OK after CMGS for ${number}, but SMS was sent`);
-      //   });
-        
-      //   return { success: true, log: `✅ Sent successfully to ${number}` };
-      // }
-
-      // return { success: false, error: resp.trim(), log: `❌ Failed to send to ${number}` };
-
-
+     
       const resp = await waitFor(['+CMGS', '+CMS ERROR', 'ERROR'], 20000);
       const out = parseSendResp(resp);
 
@@ -314,28 +294,58 @@ const sendSingleSMS = async (number, message) => {
 };
 
 
-// Wrapper with one retry attempt
+// // Wrapper with one retry attempt
+// const sendWithRetry = async (number, message) => {
+//   let result = await sendSingleSMS(number, message);
+
+//   if (!result.success) {
+//     console.log(`⚠️ Failed to send to ${number}. Retrying once...`);
+//     // wait a bit before retry (helps if modem is busy)
+//     await new Promise((r) => setTimeout(r, 2000));
+
+//     result = await sendSingleSMS(number, message);
+//     if (result.success) {
+//       result.retried = true;
+//       result.log = `✅ Sent successfully to ${number} (after retry)`;
+//     } else {
+//       result.log = `❌ Final failure for ${number} after retry`;
+//     }
+//   }
+
+//   return result;
+// };
+
+
+// Wrapper with up to 2 retries (total 3 attempts)
 const sendWithRetry = async (number, message) => {
-  let result = await sendSingleSMS(number, message);
+  let attempts = 0;
+  let result;
 
-  if (!result.success) {
-    console.log(`⚠️ Failed to send to ${number}. Retrying once...`);
-    // wait a bit before retry (helps if modem is busy)
-    await new Promise((r) => setTimeout(r, 2000));
-
+  while (attempts < 3) {   // 1st try + 2 retries
     result = await sendSingleSMS(number, message);
+    attempts++;
+
     if (result.success) {
-      result.retried = true;
-      result.log = `✅ Sent successfully to ${number} (after retry)`;
-    } else {
-      result.log = `❌ Final failure for ${number} after retry`;
+      result.attempts = attempts;
+      if (attempts === 1) {
+        result.log = `✅ Sent successfully to ${number} on first attempt`;
+      } else {
+        result.log = `✅ Sent successfully to ${number} after ${attempts} attempts`;
+      }
+      return result;
+    }
+
+    if (attempts < 3) {
+      console.log(`⚠️ Attempt ${attempts} failed for ${number}. Retrying...`);
+      await new Promise((r) => setTimeout(r, 2000)); // wait before retry
     }
   }
 
+  // If all attempts fail
+  result.attempts = attempts;
+  result.log = `❌ Final failure for ${number} after ${attempts} attempts`;
   return result;
 };
-
-
 
 exports.sendBulkSMS = async (req, res) => {
   const { numbers, message } = req.body;
@@ -352,38 +362,21 @@ exports.sendBulkSMS = async (req, res) => {
     console.log(result.log);
 
     // Push structured result for frontend
-    for (let num of numbers) {
-      const result = await sendWithRetry(num, message);
+    results.push({
+      number: num,
+      success: result.success,
+      error: result.error || null,
+      log: result.log
+    });
 
-      results.push({
-        number: num,
-        success: result.success,
-        error: result.error || null,
-        log: result.log
-      });
-
-      // Save **all messages** in the database
-      await SMS.create({
-        number: num,
-        message,
-        success: result.success,
-        error: result.error || null
-      });
-    }
-
-    
-    // Save only if sent successfully
-    // if (result.success) {
-    //   await SMS.create({ number: num, message });
-    // }
-    // Save all attempts
+    // Save **all messages** in the database
     await SMS.create({
       number: num,
       message,
       success: result.success,
       error: result.error || null
     });
-
+  
   }
 
   // Final backend response
