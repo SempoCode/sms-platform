@@ -321,7 +321,7 @@ const sendWithRetry = async (number, message) => {
   let attempts = 0;
   let result;
 
-  while (attempts < 3) {   // 1st try + 2 retries
+  while (attempts < 5) {   // 1st try + 2 retries
     result = await sendSingleSMS(number, message);
     attempts++;
 
